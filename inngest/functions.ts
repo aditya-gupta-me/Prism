@@ -5,11 +5,16 @@ import { google } from "@ai-sdk/google";
 import { firecrawl } from "@/lib/firecrawl";
 
 const URL_REGEX = /https?:\/\/[^\s]+/g;
+const MAX_SCRAPED_CONTENT_LENGTH = 8000; // Limit scraped content to ~8000 chars to stay within model context limits
 
 export const demoGenerate = inngest.createFunction(
   { id: "demo-generate" },
   { event: "demo/generate" },
   async ({ event, step }) => {
+    // Validate event.data.prompt exists and is a string
+    if (!event.data || typeof event.data.prompt !== "string") {
+      throw new Error("Missing or invalid event.data.prompt: expected a string");
+    }
     const { prompt } = event.data as { prompt: string };
 
     const urls = (await step.run("exctract-urls", async () => {
@@ -26,8 +31,11 @@ export const demoGenerate = inngest.createFunction(
       return results.filter(Boolean).join("\n\n");
     });
 
-    const finalPrompt = scrapedContent
-      ? `Context:\n${scrapedContent}\n\nQuestion: ${prompt}`
+    // Truncate scraped content to prevent exceeding model context limits
+    const truncatedScraped = scrapedContent.slice(0, MAX_SCRAPED_CONTENT_LENGTH);
+
+    const finalPrompt = truncatedScraped
+      ? `Context:\n${truncatedScraped}\n\nQuestion: ${prompt}`
       : prompt;
 
     await step.run("generate-text", async () => {
