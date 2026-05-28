@@ -12,19 +12,28 @@ export const demoGenerate = inngest.createFunction(
   async ({ event, step }) => {
     const { prompt } = event.data as { prompt: string };
 
-    const urls = (await step.run("exctract-urls", async () => {
+    const urls = (await step.run("extract-urls", async () => {
       return prompt.match(URL_REGEX) ?? [];
     })) as string[];
 
-    const scrapedContent = await step.run("scrape-urls", async () => {
-      const results = await Promise.all(
-        urls.map(async (url) => {
-          const result = await firecrawl.scrape(url, { formats: ["markdown"] });
-          return result.markdown ?? null;
-        }),
-      );
-      return results.filter(Boolean).join("\n\n");
-    });
+    const scrapedContent =
+      urls.length > 0
+        ? await step.run("scrape-urls", async () => {
+            const results = await Promise.all(
+              urls.map(async (url) => {
+                try {
+                  const result = await firecrawl.scrape(url, {
+                    formats: ["markdown"],
+                  });
+                  return result.markdown ?? null;
+                } catch {
+                  return null;
+                }
+              }),
+            );
+            return results.filter(Boolean).join("\n\n");
+          })
+        : "";
 
     const finalPrompt = scrapedContent
       ? `Context:\n${scrapedContent}\n\nQuestion: ${prompt}`
