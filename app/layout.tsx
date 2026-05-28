@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { dark } from "@clerk/themes";
 
 import { Providers } from "@/components/providers";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
