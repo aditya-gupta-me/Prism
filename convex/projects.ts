@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { verifyAuth } from "./authContext";
 
 export const create = mutation({
   args: {
@@ -7,34 +8,46 @@ export const create = mutation({
   },
 
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
+    const identity = await verifyAuth(ctx);
 
-    if (!identity) {
-      throw new Error("Unauthorized!");
-    }
-    await ctx.db.insert("projects", {
+    const projectId = await ctx.db.insert("projects", {
       name: args.name,
-      ownerId: identity?.subject,
+      ownerId: identity.subject,
+      updatedAt: Date.now(),
     });
+
+    return projectId;
+  },
+});
+
+export const getPartial = query({
+  args: {
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await verifyAuth(ctx);
+
+    // to return only authenticated users
+    // their partial data
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
+      .order("desc")
+      .take(args.limit);
   },
 });
 
 export const get = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-
-    // if user not authenticated
-    // just return empty array
-    if (!identity) {
-      return [];
-    }
+    const identity = await verifyAuth(ctx);
 
     // to return only authenticated users
-    // their data
+    // their partial data
     return await ctx.db
       .query("projects")
       .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
+      .order("desc")
       .collect();
   },
 });
