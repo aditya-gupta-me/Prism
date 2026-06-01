@@ -6,8 +6,8 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import * as React from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Authenticated } from "convex/react";
-import { UnauthenticatedView } from "@/feature/auth/components/unauthenticated-view";
-import { AuthLoadingView } from "@/feature/auth/components/auth-loading-view";
+import { UnauthenticatedView } from "@/features/auth/components/unauthenticated-view";
+import { AuthLoadingView } from "@/features/auth/components/auth-loading-view";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
@@ -21,10 +21,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
           enableSystem
           disableTransitionOnChange
         >
-          <Authenticated>
-            <UserButton />
-            {children}
-          </Authenticated>
+          <Authenticated>{children}</Authenticated>
           <Unauthenticated>
             <UnauthenticatedView />
           </Unauthenticated>
