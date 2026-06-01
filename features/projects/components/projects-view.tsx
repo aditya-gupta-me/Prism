@@ -65,7 +65,7 @@ export const ProjectsView = () => {
             <div className="flex items-center gap-2 w-full group/logo">
               <Image
                 src="/vercel.svg"
-                alt="Polaris"
+                alt="Prism"
                 width={46}
                 height={46}
                 className="size-8 md:size-11.5"
