@@ -4,32 +4,35 @@ import { useEditorStore } from "../store/use-editor-store";
 import { Id } from "@/convex/_generated/dataModel";
 
 export const useEditor = (projectId: Id<"projects">) => {
-  const store = useEditorStore();
+  const openFileAction = useEditorStore((state) => state.openFile);
+  const closeTabAction = useEditorStore((state) => state.closeTab);
+  const closeAllTabsAction = useEditorStore((state) => state.closeAllTabs);
+  const setActiveTabAction = useEditorStore((state) => state.setActiveTab);
   const tabState = useEditorStore((state) => state.getTabState(projectId));
 
   const openFile = useCallback(
     (fileId: Id<"files">, options: { pinned: boolean }) => {
-      store.openFile(projectId, fileId, options);
+      openFileAction(projectId, fileId, options);
     },
-    [store, projectId],
+    [openFileAction, projectId],
   );
 
   const closeTab = useCallback(
     (fileId: Id<"files">) => {
-      store.closeTab(projectId, fileId);
+      closeTabAction(projectId, fileId);
     },
-    [store, projectId],
+    [closeTabAction, projectId],
   );
 
   const closeAllTabs = useCallback(() => {
-    store.closeAllTabs(projectId);
-  }, [store, projectId]);
+    closeAllTabsAction(projectId);
+  }, [closeAllTabsAction, projectId]);
 
   const setActiveTab = useCallback(
     (fileId: Id<"files">) => {
-      store.setActiveTab(projectId, fileId);
+      setActiveTabAction(projectId, fileId);
     },
-    [store, projectId],
+    [setActiveTabAction, projectId],
   );
 
   return {

@@ -82,12 +82,21 @@ export const getFilePath = query({
 
     const path: { _id: string; name: string }[] = [];
     let currentId: Id<"files"> | undefined = args.id;
+    const visited = new Set<string>();
 
     while (currentId) {
+      if (visited.has(currentId)) {
+        throw new Error("Invalid file hierarchy");
+      }
+      visited.add(currentId);
+
       const file = (await ctx.db.get("files", currentId)) as
         | Doc<"files">
         | undefined;
       if (!file) break;
+      if (file.projectId !== project._id) {
+        throw new Error("Invalid file hierarchy");
+      }
 
       path.unshift({ _id: file._id, name: file.name });
       currentId = file.parentId;
