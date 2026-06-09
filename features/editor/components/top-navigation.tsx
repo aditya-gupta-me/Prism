@@ -46,6 +46,8 @@ const Tab = ({
         {fileName}
       </span>
       <button
+        type="button"
+        aria-label={`Close ${fileName} tab`}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
