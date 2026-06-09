@@ -75,12 +75,12 @@ export const Navbar = ({ projectId }: { projectId: Id<"projects"> }) => {
                   <Link href="/">
                     <Image
                       src="/vercel.svg"
-                      alt="Logo"
+                      alt="Prism Logo"
                       width={20}
                       height={20}
                     />
                     <span className={cn("text-sm font-medium", font.className)}>
-                      Polaris
+                      Prism
                     </span>
                   </Link>
                 </Button>
