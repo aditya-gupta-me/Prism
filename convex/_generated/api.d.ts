@@ -9,8 +9,11 @@
  */
 
 import type * as authContext from "../authContext.js";
+import type * as constants from "../constants.js";
+import type * as conversations from "../conversations.js";
 import type * as files from "../files.js";
 import type * as projects from "../projects.js";
+import type * as system from "../system.js";
 
 import type {
   ApiFromModules,
@@ -20,8 +23,11 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   authContext: typeof authContext;
+  constants: typeof constants;
+  conversations: typeof conversations;
   files: typeof files;
   projects: typeof projects;
+  system: typeof system;
 }>;
 
 /**
