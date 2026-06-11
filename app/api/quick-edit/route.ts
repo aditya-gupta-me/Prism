@@ -4,8 +4,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { google } from "@ai-sdk/google";
 
-import { firecrawl } from "@/lib/firecrawl";
-
 const quickEditSchema = z.object({
   editedCode: z
     .string()
@@ -46,7 +44,7 @@ export async function POST(request: Request) {
     const { selectedCode, fullCode, instruction } = await request.json();
 
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 400 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     if (!selectedCode) {
@@ -63,10 +61,27 @@ export async function POST(request: Request) {
       );
     }
 
-    const urls: string[] = instruction.match(URL_REGEX) || [];
+    const urls = Array.from(new Set(instruction.match(URL_REGEX) ?? [])).slice(
+      0,
+      3,
+    );
+
     let documentationContext = "";
 
     if (urls.length > 0) {
+      // Only load Firecrawl if URL scraping is actually needed.
+      if (!process.env.FIRECRAWL_API_KEY) {
+        return NextResponse.json(
+          {
+            error:
+              "URL scraping is unavailable because Firecrawl is not configured.",
+          },
+          { status: 503 },
+        );
+      }
+
+      const { firecrawl } = await import("@/lib/firecrawl");
+
       const scrapedResults = await Promise.all(
         urls.map(async (url) => {
           try {
@@ -79,16 +94,21 @@ export async function POST(request: Request) {
             }
 
             return null;
-          } catch {
+          } catch (error) {
+            console.error(`Failed to scrape ${url}:`, error);
             return null;
           }
         }),
       );
 
-      const validResults = scrapedResults.filter(Boolean);
+      const validResults = scrapedResults.filter(
+        (result): result is string => result !== null,
+      );
 
       if (validResults.length > 0) {
-        documentationContext = `<documentation>\n${validResults.join("\n\n")}\n</documentation>`;
+        documentationContext = `<documentation>\n${validResults.join(
+          "\n\n",
+        )}\n</documentation>`;
       }
     }
 
@@ -99,15 +119,22 @@ export async function POST(request: Request) {
 
     const { output } = await generateText({
       model: google("gemini-2.5-flash-lite"),
-      output: Output.object({ schema: quickEditSchema }),
+      output: Output.object({
+        schema: quickEditSchema,
+      }),
       prompt,
     });
 
-    return NextResponse.json({ editedCode: output.editedCode });
+    return NextResponse.json({
+      editedCode: output.editedCode,
+    });
   } catch (error) {
     console.error("Edit error:", error);
+
     return NextResponse.json(
-      { error: "Failed to generate edit" },
+      {
+        error: "Failed to generate edit",
+      },
       { status: 500 },
     );
   }

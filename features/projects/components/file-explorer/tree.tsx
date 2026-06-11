@@ -30,7 +30,7 @@ export const Tree = ({
   level?: number;
   projectId: Id<"projects">;
 }) => {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(level === 0);
   const [isRenaming, setIsRenaming] = useState(false);
   const [creating, setCreating] = useState<"file" | "folder" | null>(null);
 

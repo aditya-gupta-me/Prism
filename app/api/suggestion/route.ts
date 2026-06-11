@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
+    const body = await request.json();
     const {
       fileName,
       code,
@@ -59,11 +60,18 @@ export async function POST(request: Request) {
       textAfterCursor,
       nextLines,
       lineNumber,
-    } = await request.json();
-
-    if (!code) {
-      return NextResponse.json({ error: "Code is required" }, { status: 400 });
-    }
+    } = z
+      .object({
+        fileName: z.string(),
+        code: z.string().min(1),
+        currentLine: z.string(),
+        previousLines: z.string().optional(),
+        textBeforeCursor: z.string(),
+        textAfterCursor: z.string(),
+        nextLines: z.string().optional(),
+        lineNumber: z.number(),
+      })
+      .parse(body);
 
     const prompt = SUGGESTION_PROMPT.replace("{fileName}", fileName)
       .replace("{code}", code)

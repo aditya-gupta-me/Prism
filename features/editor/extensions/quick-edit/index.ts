@@ -58,7 +58,7 @@ const createQuickEditTooltip = (state: EditorState): readonly Tooltip[] => {
         input.type = "text";
         input.placeholder = "Edit selected code";
         input.className =
-          "bg-transparent border-none outline-none px-2 py-1 font-sans w-100";
+          "bg-transparent border-none outline-none px-2 py-1 font-sans w-full";
         input.autofocus = true;
 
         const buttonContainer = document.createElement("div");

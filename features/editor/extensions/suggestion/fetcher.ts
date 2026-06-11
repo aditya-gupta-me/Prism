@@ -43,6 +43,7 @@ export const fetcher = async (
     if (error instanceof Error && error.name === "AbortError") {
       return null;
     }
+    // Todo: -> // Inline suggestions are requested frequently; avoid spamming toasts on transient failures.
     toast.error("Failed to fetch AI completion");
     return null;
   }
