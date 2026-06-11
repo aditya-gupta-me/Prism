@@ -57,10 +57,12 @@ const DEBOUNCE_DELAY = 300;
 let currentAbortController: AbortController | null = null;
 
 const generatePayload = (view: EditorView, fileName: string) => {
+  const selection = view.state.selection.main;
+  if (!selection.empty) return null;
   const code = view.state.doc.toString();
   if (!code || code.trim().length === 0) return null;
 
-  const cursorPosition = view.state.selection.main.head;
+  const cursorPosition = selection.head;
   const currentLine = view.state.doc.lineAt(cursorPosition);
   const cursorInLine = cursorPosition - currentLine.from;
 
