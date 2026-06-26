@@ -88,7 +88,7 @@ export const ProjectIdView = ({ projectId }: { projectId: Id<"projects"> }) => {
             activeView === "preview" ? "visible" : "invisible",
           )}
         >
-          <PreviewView projectId={projectId} />
+          <PreviewView projectId={projectId} isActive={activeView === "preview"} />
         </div>
       </div>
     </div>

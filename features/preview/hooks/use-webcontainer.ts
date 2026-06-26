@@ -144,10 +144,12 @@ export const useWebContainer = ({
     const filesMap = new Map(files.map((f) => [f._id, f]));
 
     for (const file of files) {
-      if (file.type !== "file" || file.storageId || !file.content) continue;
+      if (file.type !== "file" || file.storageId || file.content === undefined) continue;
 
       const filePath = getFilePath(file, filesMap);
-      container.fs.writeFile(filePath, file.content);
+      container.fs.writeFile(filePath, file.content).catch((err) => {
+        console.error(`Failed to write file ${filePath}:`, err);
+      });
     }
   }, [files, status]);
 

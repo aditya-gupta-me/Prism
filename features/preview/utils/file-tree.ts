@@ -5,6 +5,26 @@ import { Doc, Id } from "@/convex/_generated/dataModel";
 type FileDoc = Doc<"files">;
 
 /**
+ * Build path parts by traversing parent chain
+ */
+const getPathParts = (
+  file: FileDoc,
+  filesMap: Map<Id<"files">, FileDoc>,
+): string[] => {
+  const parts: string[] = [file.name];
+  let parentId = file.parentId;
+
+  while (parentId) {
+    const parent = filesMap.get(parentId);
+    if (!parent) break;
+    parts.unshift(parent.name);
+    parentId = parent.parentId;
+  }
+
+  return parts;
+};
+
+/**
  * Convert flat Convex files to nested FileSystemTree for WebContainer
  */
 export const buildFileTree = (files: FileDoc[]): FileSystemTree => {
@@ -12,17 +32,7 @@ export const buildFileTree = (files: FileDoc[]): FileSystemTree => {
   const filesMap = new Map(files.map((f) => [f._id, f]));
 
   const getPath = (file: FileDoc): string[] => {
-    const parts: string[] = [file.name];
-    let parentId = file.parentId;
-
-    while (parentId) {
-      const parent = filesMap.get(parentId);
-      if (!parent) break;
-      parts.unshift(parent.name);
-      parentId = parent.parentId;
-    }
-
-    return parts;
+    return getPathParts(file, filesMap);
   };
 
   for (const file of files) {
@@ -35,7 +45,9 @@ export const buildFileTree = (files: FileDoc[]): FileSystemTree => {
 
       if (isLast) {
         if (file.type === "folder") {
-          current[part] = { directory: {} };
+          if (!current[part]) {
+            current[part] = { directory: {} };
+          }
         } else if (!file.storageId && file.content !== undefined) {
           current[part] = { file: { contents: file.content } };
         }
@@ -61,15 +73,5 @@ export const getFilePath = (
   file: FileDoc,
   filesMap: Map<Id<"files">, FileDoc>,
 ): string => {
-  const parts: string[] = [file.name];
-  let parentId = file.parentId;
-
-  while (parentId) {
-    const parent = filesMap.get(parentId);
-    if (!parent) break;
-    parts.unshift(parent.name);
-    parentId = parent.parentId;
-  }
-
-  return parts.join("/");
+  return getPathParts(file, filesMap).join("/");
 };

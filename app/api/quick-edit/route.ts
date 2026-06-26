@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       const { firecrawl } = await import("@/lib/firecrawl");
 
       const scrapedResults = await Promise.all(
-        urls.map(async (url) => {
+        urls.map(async (url: string) => {
           try {
             const result = await firecrawl.scrape(url, {
               formats: ["markdown"],
