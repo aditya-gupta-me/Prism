@@ -116,7 +116,7 @@ export const processMessage = inngest.createFunction(
         name: "title-generator",
         system: TITLE_GENERATOR_SYSTEM_PROMPT,
         model: gemini({
-          model: "gemini-2.5-flash-lite",
+          model: "gemini-3.1-flash-lite",
           defaultParameters: {
             generationConfig: {
               temperature: 0,
@@ -159,7 +159,7 @@ export const processMessage = inngest.createFunction(
       description: "An expert AI coding assistant",
       system: systemPrompt,
       model: gemini({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-3.1-flash-lite",
         defaultParameters: {
           generationConfig: {
             temperature: 0.3,

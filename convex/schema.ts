@@ -21,8 +21,13 @@ export default defineSchema({
         v.literal("cancelled"),
       ),
     ),
-
-    exportRepoURL: v.optional(v.string()),
+    exportRepoUrl: v.optional(v.string()),
+    settings: v.optional(
+      v.object({
+        installCommand: v.optional(v.string()),
+        devCommand: v.optional(v.string()),
+      }),
+    ),
   }).index("by_owner", ["ownerId"]),
 
   files: defineTable({
@@ -30,10 +35,8 @@ export default defineSchema({
     parentId: v.optional(v.id("files")),
     name: v.string(),
     type: v.union(v.literal("file"), v.literal("folder")),
-    // for text files only
-    content: v.optional(v.string()),
-    // for binary files only
-    storageId: v.optional(v.id("_storage")),
+    content: v.optional(v.string()), // Text files only
+    storageId: v.optional(v.id("_storage")), // Binary files only
     updatedAt: v.number(),
   })
     .index("by_project", ["projectId"])

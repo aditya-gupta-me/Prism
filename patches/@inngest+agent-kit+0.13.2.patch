@@ -1,0 +1,92 @@
+diff --git a/node_modules/@inngest/agent-kit/dist/chunk-BSWKEFTT.js b/node_modules/@inngest/agent-kit/dist/chunk-BSWKEFTT.js
+index 50538d4..20cbda1 100644
+--- a/node_modules/@inngest/agent-kit/dist/chunk-BSWKEFTT.js
++++ b/node_modules/@inngest/agent-kit/dist/chunk-BSWKEFTT.js
+@@ -658,6 +658,7 @@ var responseParser4 = (input) => {
+           content: content.text
+         });
+       } else if (candidate.content.role === "model" && "functionCall" in content) {
++        const thoughtSignature = content.thoughtSignature ?? content.thought_signature;
+         messages.push({
+           role: "assistant",
+           type: "tool_call",
+@@ -667,7 +668,8 @@ var responseParser4 = (input) => {
+               name: content.functionCall.name,
+               input: content.functionCall.args,
+               type: "tool",
+-              id: content.functionCall.name
++              id: content.functionCall.name,
++              ...(thoughtSignature != null && { thought_signature: thoughtSignature })
+             }
+           ]
+         });
+@@ -711,7 +713,10 @@ var messageToContent = (m) => {
+                 functionCall: {
+                   name: m.tools[0].name,
+                   args: m.tools[0].input
+-                }
++                },
++                ...(m.tools[0].thought_signature != null
++                  ? { thoughtSignature: m.tools[0].thought_signature }
++                  : { thoughtSignature: "skip_thought_signature_validator" })
+               }
+             ]
+           };
+@@ -735,7 +740,10 @@ var messageToContent = (m) => {
+                 functionCall: {
+                   name: m.tools[0].name,
+                   args: m.tools[0].input
+-                }
++                },
++                ...(m.tools[0].thought_signature != null
++                  ? { thoughtSignature: m.tools[0].thought_signature }
++                  : { thoughtSignature: "skip_thought_signature_validator" })
+               }
+             ]
+           };
+diff --git a/node_modules/@inngest/agent-kit/dist/index.cjs b/node_modules/@inngest/agent-kit/dist/index.cjs
+index 2ecaa90..805ddf3 100644
+--- a/node_modules/@inngest/agent-kit/dist/index.cjs
++++ b/node_modules/@inngest/agent-kit/dist/index.cjs
+@@ -1476,6 +1476,7 @@ var responseParser4 = (input) => {
+           content: content.text
+         });
+       } else if (candidate.content.role === "model" && "functionCall" in content) {
++        const thoughtSignature = content.thoughtSignature ?? content.thought_signature;
+         messages.push({
+           role: "assistant",
+           type: "tool_call",
+@@ -1485,7 +1486,8 @@ var responseParser4 = (input) => {
+               name: content.functionCall.name,
+               input: content.functionCall.args,
+               type: "tool",
+-              id: content.functionCall.name
++              id: content.functionCall.name,
++              ...(thoughtSignature != null && { thought_signature: thoughtSignature })
+             }
+           ]
+         });
+@@ -1529,7 +1531,10 @@ var messageToContent = (m) => {
+                 functionCall: {
+                   name: m.tools[0].name,
+                   args: m.tools[0].input
+-                }
++                },
++                ...(m.tools[0].thought_signature != null
++                  ? { thoughtSignature: m.tools[0].thought_signature }
++                  : { thoughtSignature: "skip_thought_signature_validator" })
+               }
+             ]
+           };
+@@ -1553,7 +1558,10 @@ var messageToContent = (m) => {
+                 functionCall: {
+                   name: m.tools[0].name,
+                   args: m.tools[0].input
+-                }
++                },
++                ...(m.tools[0].thought_signature != null
++                  ? { thoughtSignature: m.tools[0].thought_signature }
++                  : { thoughtSignature: "skip_thought_signature_validator" })
+               }
+             ]
+           };
