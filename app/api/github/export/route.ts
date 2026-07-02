@@ -4,7 +4,6 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 
 import { inngest } from "@/inngest/client";
 
-import { Id } from "@/convex/_generated/dataModel";
 
 const requestSchema = z.object({
   projectId: z.string(),
