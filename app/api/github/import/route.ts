@@ -11,13 +11,23 @@ const requestSchema = z.object({
   url: z.url(),
 });
 
-function parseGitHubUrl(url: string) {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) {
-    throw new Error("Invalid GitHub URL");
+function parseGitHubUrl(input: string) {
+  const u = new URL(input);
+
+  if (u.hostname !== "github.com" && u.hostname !== "www.github.com") {
+    return null;
   }
 
-  return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+  const [owner, repo] = u.pathname
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter(Boolean);
+
+  if (!owner || !repo) {
+    return null;
+  }
+
+  return { owner, repo: repo.replace(/\.git$/, "") };
 }
 
 export async function POST(request: Request) {
