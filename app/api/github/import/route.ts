@@ -40,7 +40,12 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { url } = requestSchema.parse(body);
 
-  const { owner, repo } = parseGitHubUrl(url);
+  const parsed = parseGitHubUrl(url);
+  if (!parsed) {
+    return NextResponse.json({ error: "Invalid GitHub URL" }, { status: 400 });
+  }
+
+  const { owner, repo } = parsed;
 
   const client = await clerkClient();
   const tokens = await client.users.getUserOauthAccessToken(userId, "github");
