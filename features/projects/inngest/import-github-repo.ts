@@ -57,26 +57,16 @@ export const importGithubRepo = inngest.createFunction(
     });
 
     const tree = await step.run("fetch-repo-tree", async () => {
-      try {
-        const { data } = await octokit.rest.git.getTree({
-          owner,
-          repo,
-          tree_sha: "main",
-          recursive: "1",
-        });
+      const { data: repoInfo } = await octokit.rest.repos.get({ owner, repo });
 
-        return data;
-      } catch {
-        // Fallback to master branch
-        const { data } = await octokit.rest.git.getTree({
-          owner,
-          repo,
-          tree_sha: "master",
-          recursive: "1",
-        });
+      const { data } = await octokit.rest.git.getTree({
+        owner,
+        repo,
+        tree_sha: repoInfo.default_branch,
+        recursive: "1",
+      });
 
-        return data;
-      }
+      return data;
     });
 
     // Sort folders by depth so parents are created before children
