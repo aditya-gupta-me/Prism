@@ -92,7 +92,7 @@ export const exportToGithub = inngest.createFunction(
       const { data: ref } = await octokit.rest.git.getRef({
         owner: user.login,
         repo: repoName,
-        ref: "heads/main",
+        ref: `heads/${repo.default_branch}`,
       });
       return ref.object.sha;
     });
