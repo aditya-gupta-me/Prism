@@ -1,0 +1,91 @@
+import { z } from "zod";
+import { NextResponse } from "next/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
+
+import { convex } from "@/lib/convex-client";
+import { inngest } from "@/inngest/client";
+
+import { api } from "@/convex/_generated/api";
+
+const requestSchema = z.object({
+  url: z.url(),
+});
+
+function parseGitHubUrl(input: string) {
+  const u = new URL(input);
+
+  if (u.hostname !== "github.com" && u.hostname !== "www.github.com") {
+    return null;
+  }
+
+  const [owner, repo] = u.pathname
+    .replace(/^\/+/, "")
+    .split("/")
+    .filter(Boolean);
+
+  if (!owner || !repo) {
+    return null;
+  }
+
+  return { owner, repo: repo.replace(/\.git$/, "") };
+}
+
+export async function POST(request: Request) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const { url } = requestSchema.parse(body);
+
+  const parsed = parseGitHubUrl(url);
+  if (!parsed) {
+    return NextResponse.json({ error: "Invalid GitHub URL" }, { status: 400 });
+  }
+
+  const { owner, repo } = parsed;
+
+  const client = await clerkClient();
+  const tokens = await client.users.getUserOauthAccessToken(userId, "github");
+  const githubToken = tokens.data[0]?.token;
+
+  if (!githubToken) {
+    return NextResponse.json(
+      { error: "GitHub not connected. Please reconnect your GitHub account." },
+      { status: 400 },
+    );
+  }
+
+  const internalKey = process.env.PRISM_CONVEX_INTERNAL_KEY;
+
+  if (!internalKey) {
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 },
+    );
+  }
+
+  const projectId = await convex.mutation(api.system.createProject, {
+    internalKey,
+    name: repo,
+    ownerId: userId,
+  });
+
+  const event = await inngest.send({
+    name: "github/import.repo",
+    data: {
+      owner,
+      repo,
+      projectId,
+      githubToken,
+    },
+  });
+
+  return NextResponse.json({
+    success: true,
+    projectId,
+    eventId: event.ids[0],
+  });
+}
