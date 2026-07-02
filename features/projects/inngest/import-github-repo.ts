@@ -166,8 +166,9 @@ export const importGithubRepo = inngest.createFunction(
               parentId,
             });
           }
-        } catch {
-          console.error(`Failed to import file: ${file.path}`);
+        } catch (error) {
+          console.error(`Failed to import file: ${file.path}`, error);
+          throw new NonRetriableError(`Failed to import file: ${file.path}`);
         }
       }
     });
