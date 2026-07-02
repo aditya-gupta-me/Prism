@@ -6,7 +6,7 @@ import { processMessage } from "@/features/conversations/inngest/process-message
 import { importGithubRepo } from "@/features/projects/inngest/import-github-repo";
 import { exportToGithub } from "@/features/projects/inngest/export-to-github";
 
-// Create an API that serves zero functions
+// Create an API route that serves Inngest functions
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions: [processMessage, importGithubRepo, exportToGithub],
