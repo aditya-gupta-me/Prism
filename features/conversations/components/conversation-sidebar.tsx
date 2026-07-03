@@ -31,7 +31,7 @@ import {
   useConversations,
   useCreateConversation,
   useMessages,
-} from "../hooks/use-conversations";
+} from "@/features/conversations/hooks/use-conversations";
 
 import { Id } from "@/convex/_generated/dataModel";
 import { DEFAULT_CONVERSATION_TITLE } from "@/convex/constants";
