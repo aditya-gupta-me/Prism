@@ -1,4 +1,4 @@
-import ky from "ky";
+import ky, { HTTPError } from "ky";
 import { toast } from "sonner";
 import { useState } from "react";
 import { CopyIcon, HistoryIcon, LoaderIcon, PlusIcon } from "lucide-react";
@@ -112,8 +112,16 @@ export const ConversationSidebar = ({
           message: message.text,
         },
       });
-    } catch {
-      toast.error("Message failed to send");
+    } catch (error) {
+      if (error instanceof HTTPError && error.response.status === 429) {
+        toast.error(
+          "You're sending messages too quickly. Please wait a moment and try again.",
+        );
+      } else if (error instanceof HTTPError && error.response.status === 404) {
+        toast.error("This conversation could not be found.");
+      } else {
+        toast.error("Message failed to send. Please try again.");
+      }
     }
 
     setInput("");

@@ -12,7 +12,7 @@ export const createScrapeUrlsTool = () => {
   return createTool({
     name: "scrapeUrls",
     description:
-      "Scrape content from URLs to get documentation or reference material. Use this when the user provides URLs or references external documentation. Returns markdown content from the scraped pages.",
+      "Scrape content from URLs to get documentation or reference material. Use this when the user provides URLs or references external documentation. Returns markdown content from the scraped pages. At most 3 URLs are scraped per call and each result is truncated to ~8000 characters.",
     parameters: z.object({
       urls: z.array(z.string()).describe("Array of URLs to scrape for content"),
     }),
@@ -22,7 +22,11 @@ export const createScrapeUrlsTool = () => {
         return `Error: ${parsed.error.issues[0].message}`;
       }
 
-      const { urls } = parsed.data;
+      // Cap the number of URLs and the size of each result to bound cost and
+      // keep the tool output within the model's context budget.
+      const MAX_URLS = 3;
+      const MAX_CONTENT_LENGTH = 8000;
+      const urls = parsed.data.urls.slice(0, MAX_URLS);
 
       try {
         return await toolStep?.run("scrape-urls", async () => {
@@ -37,7 +41,7 @@ export const createScrapeUrlsTool = () => {
               if (result.markdown) {
                 results.push({
                   url,
-                  content: result.markdown,
+                  content: result.markdown.slice(0, MAX_CONTENT_LENGTH),
                 });
               }
             } catch {
