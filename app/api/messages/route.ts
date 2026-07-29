@@ -32,83 +32,72 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { conversationId, message } = requestSchema.parse(body);
 
-  // Call convex mutation, query
-  const conversation = await convex.query(api.system.getConversationById, {
+  // Atomic claim: ownership check + rate cap + supersede in-flight run + create
+  // user message and assistant placeholder, all in one serializable Convex
+  // transaction. Two concurrent POSTs for the same project can no longer both
+  // see "no processing message" and both proceed.
+  const result = await convex.mutation(api.system.prepareMessageRun, {
     internalKey,
     conversationId: conversationId as Id<"conversations">,
+    ownerId: userId,
+    message,
   });
 
-  if (!conversation) {
+  if (!result.ok) {
+    if (result.error === "rate_limited") {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please try again later." },
+        { status: 429 },
+      );
+    }
     return NextResponse.json(
       { error: "Conversation not found" },
       { status: 404 },
     );
   }
 
-  const projectId = conversation.projectId;
-
-  // Find all processing messages in this project
-  const processingMessages = await convex.query(
-    api.system.getProcessingMessages,
-    {
-      internalKey,
-      projectId,
-    },
-  );
-
-  if (processingMessages.length > 0) {
-    // Cancel all processing messages
-    await Promise.all(
-      processingMessages.map(async (msg) => {
-        await inngest.send({
-          name: "message/cancel",
-          data: {
-            messageId: msg._id,
-          },
-        });
-
-        await convex.mutation(api.system.updateMessageStatus, {
-          internalKey,
-          messageId: msg._id,
-          status: "cancelled",
-        });
-      }),
+  // Best-effort stop of superseded runs. The concurrency key on the function is
+  // the hard guarantee; these cancel events just end the old runs sooner.
+  if (result.supersededMessageIds.length > 0) {
+    await inngest.send(
+      result.supersededMessageIds.map((messageId) => ({
+        name: "message/cancel" as const,
+        data: { messageId },
+      })),
     );
   }
 
-  // Create user message
-  await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId: conversationId as Id<"conversations">,
-    projectId,
-    role: "user",
-    content: message,
-  });
+  // Trigger Inngest to process the message. ownerId rides along so the
+  // function can re-verify ownership at execution time (defense in depth
+  // against replayed/tampered events).
+  try {
+    const event = await inngest.send({
+      name: "message/sent",
+      data: {
+        messageId: result.assistantMessageId,
+        conversationId,
+        projectId: result.projectId,
+        ownerId: userId,
+        message,
+      },
+    });
 
-  // Create assistant message placeholder with processing status
-  const assistantMessageId = await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId: conversationId as Id<"conversations">,
-    projectId,
-    role: "assistant",
-    content: "",
-    status: "processing",
-  });
-
-  // Trigger Inngest to process the message
-  const event = await inngest.send({
-    name: "message/sent",
-    data: {
-      messageId: assistantMessageId,
-      conversationId,
-      projectId,
-      message,
-    },
-  });
-
-  return NextResponse.json({
-    success: true,
-    eventId: event.ids[0],
-    messageId: assistantMessageId,
-  });
+    return NextResponse.json({
+      success: true,
+      eventId: event.ids[0],
+      messageId: result.assistantMessageId,
+    });
+  } catch {
+    // Compensation (MEDIUM-1): the placeholder is already "processing" but no
+    // run will ever exist, so settle it here instead of leaving it stuck.
+    await convex.mutation(api.system.updateMessageContent, {
+      internalKey,
+      messageId: result.assistantMessageId,
+      content: "Failed to start processing this message. Please try again.",
+    });
+    return NextResponse.json(
+      { error: "Failed to queue message" },
+      { status: 502 },
+    );
+  }
 }

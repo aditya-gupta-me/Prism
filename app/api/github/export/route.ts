@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 
+import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { getGithubTokenForUser } from "@/lib/github-token";
 
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 
 const requestSchema = z.object({
   projectId: z.string(),
@@ -23,23 +27,34 @@ export async function POST(request: Request) {
   const { projectId, repoName, visibility, description } =
     requestSchema.parse(body);
 
-  const client = await clerkClient();
-  const tokens = await client.users.getUserOauthAccessToken(userId, "github");
-  const githubToken = tokens.data[0]?.token;
-
-  if (!githubToken) {
-    return NextResponse.json(
-      { error: "GitHub not connected. Please reconnect your GitHub account." },
-      { status: 400 },
-    );
-  }
-
   const internalKey = process.env.PRISM_CONVEX_INTERNAL_KEY;
 
   if (!internalKey) {
     return NextResponse.json(
       { error: "Server configuration error" },
       { status: 500 },
+    );
+  }
+
+  // Verify the authenticated user owns this project before exporting it.
+  const project = await convex.query(api.system.getOwnedProject, {
+    internalKey,
+    projectId: projectId as Id<"projects">,
+    ownerId: userId,
+  });
+
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
+  // Fail-fast UX check. The token is NOT forwarded in the event payload;
+  // the Inngest function fetches its own fresh token at execution time.
+  const githubToken = await getGithubTokenForUser(userId);
+
+  if (!githubToken) {
+    return NextResponse.json(
+      { error: "GitHub not connected. Please reconnect your GitHub account." },
+      { status: 400 },
     );
   }
 
@@ -50,8 +65,8 @@ export async function POST(request: Request) {
       repoName,
       visibility,
       description,
-      githubToken,
-    }
+      userId,
+    },
   });
 
   return NextResponse.json({

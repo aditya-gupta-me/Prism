@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { getGithubTokenForUser } from "@/lib/github-token";
 
 import { api } from "@/convex/_generated/api";
 
@@ -47,9 +48,9 @@ export async function POST(request: Request) {
 
   const { owner, repo } = parsed;
 
-  const client = await clerkClient();
-  const tokens = await client.users.getUserOauthAccessToken(userId, "github");
-  const githubToken = tokens.data[0]?.token;
+  // Fail-fast UX check. The token is NOT forwarded in the event payload;
+  // the Inngest function fetches its own fresh token at execution time.
+  const githubToken = await getGithubTokenForUser(userId);
 
   if (!githubToken) {
     return NextResponse.json(
@@ -73,19 +74,33 @@ export async function POST(request: Request) {
     ownerId: userId,
   });
 
-  const event = await inngest.send({
-    name: "github/import.repo",
-    data: {
-      owner,
-      repo,
-      projectId,
-      githubToken,
-    },
-  });
+  // The project is created with importStatus "importing". If the event fails to
+  // send, no run will ever exist to clear it — so compensate by marking failed.
+  try {
+    const event = await inngest.send({
+      name: "github/import.repo",
+      data: {
+        owner,
+        repo,
+        projectId,
+        userId,
+      },
+    });
 
-  return NextResponse.json({
-    success: true,
-    projectId,
-    eventId: event.ids[0],
-  });
+    return NextResponse.json({
+      success: true,
+      projectId,
+      eventId: event.ids[0],
+    });
+  } catch {
+    await convex.mutation(api.system.updateImportStatus, {
+      internalKey,
+      projectId,
+      status: "failed",
+    });
+    return NextResponse.json(
+      { error: "Failed to start import" },
+      { status: 502 },
+    );
+  }
 }
