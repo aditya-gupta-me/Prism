@@ -74,10 +74,11 @@ export const Navbar = ({ projectId }: { projectId: Id<"projects"> }) => {
                 <Button variant="ghost" className="w-fit! p-1.5! h-7!" asChild>
                   <Link href="/">
                     <Image
-                      src="/vercel.svg"
+                      src="/prism.png"
                       alt="Prism Logo"
                       width={20}
                       height={20}
+                      className="size-5 aspect-square object-contain rounded-sm shrink-0"
                     />
                     <span className={cn("text-sm font-medium", font.className)}>
                       Prism

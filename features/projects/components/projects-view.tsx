@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Poppins } from "next/font/google";
 import { SparkleIcon } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
@@ -62,15 +63,18 @@ export const ProjectsView = () => {
       <div className="min-h-screen bg-sidebar flex flex-col items-center justify-center p-6 md:p-16">
         <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-center">
           <div className="flex justify-between gap-4 w-full items-center">
-            <div className="flex items-center gap-2 w-full group/logo">
-              <img
-                src="/vercel.svg"
-                alt="Prism"
-                className="size-[32px] md:size-[46px]"
+            <div className="flex items-center gap-2.5 w-full group/logo">
+              <Image
+                src="/prism.png"
+                alt="Prism Logo"
+                width={46}
+                height={46}
+                className="size-8 md:size-11 aspect-square object-contain rounded-lg shrink-0"
+                priority
               />
               <h1
                 className={cn(
-                  "text-4xl md:text-5xl font-semibold",
+                  "text-4xl md:text-5xl font-semibold tracking-tight",
                   font.className,
                 )}
               >

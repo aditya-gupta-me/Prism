@@ -38,11 +38,11 @@ export const EditorView = ({ projectId }: { projectId: Id<"projects"> }) => {
         {!activeFile && (
           <div className="size-full flex items-center justify-center">
             <Image
-              src="/vercel.svg"
+              src="/prism.png"
               alt="Prism"
-              width={50}
-              height={50}
-              className="opacity-25"
+              width={64}
+              height={64}
+              className="opacity-20 aspect-square object-contain"
             />
           </div>
         )}
