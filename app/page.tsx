@@ -1,4 +1,4 @@
-import { ProjectsView } from "@/features/projects/components/projects-view";
+import { HomeView } from "@/features/home/components/home-view";
 import { getSiteUrl } from "@/lib/site-url";
 
 export default function Home() {
@@ -33,7 +33,7 @@ export default function Home() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <ProjectsView />
+      <HomeView />
     </>
   );
 }

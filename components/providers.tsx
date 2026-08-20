@@ -1,13 +1,10 @@
 "use client";
 
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
-import { AuthLoading, ConvexReactClient, Unauthenticated } from "convex/react";
+import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import * as React from "react";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Authenticated } from "convex/react";
-import { UnauthenticatedView } from "@/features/auth/components/unauthenticated-view";
-import { AuthLoadingView } from "@/features/auth/components/auth-loading-view";
 
 const convex = new ConvexReactClient(
   process.env.NEXT_PUBLIC_CONVEX_URL || "https://placeholder.convex.cloud",
@@ -23,13 +20,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
           enableSystem
           disableTransitionOnChange
         >
-          <Authenticated>{children}</Authenticated>
-          <Unauthenticated>
-            <UnauthenticatedView />
-          </Unauthenticated>
-          <AuthLoading>
-            <AuthLoadingView />
-          </AuthLoading>
+          {children}
         </ThemeProvider>
       </ConvexProviderWithClerk>
     </ClerkProvider>
