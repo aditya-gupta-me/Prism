@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createTool } from "@inngest/agent-kit";
-import { firecrawl } from "@/lib/firecrawl";
+import { getFirecrawl } from "@/lib/firecrawl";
 
 const paramsSchema = z.object({
   urls: z
@@ -23,6 +23,12 @@ export const createScrapeUrlsTool = () => {
       }
 
       const { urls } = parsed.data;
+
+      if (!process.env.FIRECRAWL_API_KEY) {
+        return "URL scraping is unavailable because FIRECRAWL_API_KEY is not configured.";
+      }
+
+      const firecrawl = getFirecrawl();
 
       try {
         return await toolStep?.run("scrape-urls", async () => {
