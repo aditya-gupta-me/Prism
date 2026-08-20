@@ -6,6 +6,8 @@ import { processMessage } from "@/features/conversations/inngest/process-message
 import { importGithubRepo } from "@/features/projects/inngest/import-github-repo";
 import { exportToGithub } from "@/features/projects/inngest/export-to-github";
 
+export const maxDuration = 60;
+
 // Create an API route that serves Inngest functions
 export const { GET, POST, PUT } = serve({
   client: inngest,

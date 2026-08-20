@@ -79,7 +79,8 @@ export async function POST(request: Request) {
         );
       }
 
-      const { firecrawl } = await import("@/lib/firecrawl");
+      const { getFirecrawl } = await import("@/lib/firecrawl");
+      const firecrawl = getFirecrawl();
 
       const scrapedResults = await Promise.all(
         urls.map(async (url) => {
