@@ -61,10 +61,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const urls = Array.from(new Set(instruction.match(URL_REGEX) ?? [])).slice(
-      0,
-      3,
-    );
+    const urls = Array.from(
+      new Set<string>((instruction.match(URL_REGEX) as string[] | null) ?? []),
+    ).slice(0, 3);
 
     let documentationContext = "";
 
@@ -83,7 +82,7 @@ export async function POST(request: Request) {
       const { firecrawl } = await import("@/lib/firecrawl");
 
       const scrapedResults = await Promise.all(
-        urls.map(async (url: string) => {
+        urls.map(async (url) => {
           try {
             const result = await firecrawl.scrape(url, {
               formats: ["markdown"],

@@ -8,6 +8,7 @@ import {
   crosshairCursor,
   lineNumbers,
   highlightActiveLineGutter,
+  type KeyBinding,
 } from "@codemirror/view";
 import { Extension, EditorState } from "@codemirror/state";
 import {
@@ -65,6 +66,6 @@ export const customSetup: Extension = (() => [
     ...historyKeymap,
     ...foldKeymap,
     ...completionKeymap,
-    ...lintKeymap,
+    ...(lintKeymap as readonly KeyBinding[]),
   ]),
 ])();
