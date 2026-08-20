@@ -1,5 +1,14 @@
+import type { Metadata } from "next";
 import { ProjectIdLayout } from "@/features/projects/components/project-id-layout";
 import { Id } from "@/convex/_generated/dataModel";
+
+export const metadata: Metadata = {
+  title: "Workspace",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 const Layout = async ({
   children,
