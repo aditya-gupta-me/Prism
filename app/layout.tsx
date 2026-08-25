@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
+import { Analytics } from '@vercel/analytics/next';
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -74,6 +76,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <Toaster />
+          <Analytics />
         </Providers>
       </body>
     </html>

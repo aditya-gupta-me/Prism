@@ -44,6 +44,7 @@
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
     "@tanstack/react-form": "^1.27.7",
+    "@vercel/analytics": "^2.0.1",
     "@webcontainer/api": "^1.6.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
