@@ -39,6 +39,6 @@ jobs:
       - name: Build
         env:
           NEXT_PUBLIC_CONVEX_URL: "https://placeholder.convex.cloud"
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_placeholder"
-          CLERK_SECRET_KEY: "sk_test_placeholder"
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_c3RlYWR5LXdhbHJ1cy01OC5jbGVyay5hY2NvdW50cy5kZXYk"
+          CLERK_SECRET_KEY: "sk_test_mockSecretKey12345678901234567890"
         run: npm run build
