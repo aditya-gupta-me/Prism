@@ -31,6 +31,17 @@ export async function POST(request: Request) {
     );
   }
 
+  // Verify the authenticated user owns this project before acting on it.
+  const project = await convex.query(api.system.getOwnedProject, {
+    internalKey,
+    projectId: projectId as Id<"projects">,
+    ownerId: userId,
+  });
+
+  if (!project) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
   const event = await inngest.send({
     name: "github/export.cancel",
     data: {
@@ -38,7 +49,12 @@ export async function POST(request: Request) {
     },
   });
 
-  // Update status to cancelled
+  // Update status to cancelled. This is now guarded in updateExportStatus so it
+  // only applies while a run is actually "exporting".
+  // NOTE: If the run had already created the GitHub repo, that repo is left in
+  // place intentionally — deleting a user's repo as a cancellation side effect
+  // is more dangerous than leaving an empty one, and would require the
+  // delete_repo OAuth scope we don't request.
   await convex.mutation(api.system.updateExportStatus, {
     internalKey,
     projectId: projectId as Id<"projects">,

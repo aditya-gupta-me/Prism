@@ -14,50 +14,124 @@ const validateInternalKey = (key: string) => {
   }
 };
 
-export const getConversationById = query({
+// Ownership-checked project lookup for job-triggering routes and Inngest
+// execution-time re-verification. Returns null (not throw) so callers can
+// map to a 404 without leaking whether the ID exists.
+export const getOwnedProject = query({
   args: {
-    conversationId: v.id("conversations"),
     internalKey: v.string(),
+    projectId: v.id("projects"),
+    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    return await ctx.db.get(args.conversationId);
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      return null;
+    }
+    return project;
   },
 });
 
-export const createMessage = mutation({
+// Ownership-checked conversation lookup (verifies the conversation's project
+// is owned by ownerId). Returns null on any miss.
+export const getOwnedConversation = query({
   args: {
     internalKey: v.string(),
     conversationId: v.id("conversations"),
-    projectId: v.id("projects"),
-    role: v.union(v.literal("user"), v.literal("assistant")),
-    content: v.string(),
-    status: v.optional(
-      v.union(
-        v.literal("processing"),
-        v.literal("completed"),
-        v.literal("cancelled"),
-      ),
-    ),
+    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
-    const messageId = await ctx.db.insert("messages", {
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      return null;
+    }
+
+    const project = await ctx.db.get(conversation.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      return null;
+    }
+    return conversation;
+  },
+});
+
+const MAX_USER_MESSAGES_PER_HOUR = 30;
+
+// Atomically prepares a message run for a project. In one serializable
+// transaction it: verifies ownership, enforces a per-project hourly rate cap,
+// supersedes (cancels) any in-flight processing message, and creates the user
+// message + assistant placeholder. Convex OCC serializes concurrent callers, so
+// at most one "processing" message per project survives — the single-flight
+// invariant no longer depends on a racy read-then-act in the route.
+export const prepareMessageRun = mutation({
+  args: {
+    internalKey: v.string(),
+    conversationId: v.id("conversations"),
+    ownerId: v.string(),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+
+    const conversation = await ctx.db.get(args.conversationId);
+    if (!conversation) {
+      return { ok: false as const, error: "not_found" as const };
+    }
+    const project = await ctx.db.get(conversation.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      return { ok: false as const, error: "not_found" as const };
+    }
+
+    // Bounded recency read — never scans the whole table.
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_project", (q) => q.eq("projectId", project._id))
+      .order("desc")
+      .take(80);
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const recentUserCount = recent.filter(
+      (m) => m.role === "user" && m._creationTime > oneHourAgo,
+    ).length;
+    if (recentUserCount >= MAX_USER_MESSAGES_PER_HOUR) {
+      return { ok: false as const, error: "rate_limited" as const };
+    }
+
+    // Atomic supersede: serializability guarantees at most one "processing"
+    // message per project after this transaction commits.
+    const processing = await ctx.db
+      .query("messages")
+      .withIndex("by_project_status", (q) =>
+        q.eq("projectId", project._id).eq("status", "processing"),
+      )
+      .collect();
+    for (const msg of processing) {
+      await ctx.db.patch(msg._id, { status: "cancelled" as const });
+    }
+
+    await ctx.db.insert("messages", {
       conversationId: args.conversationId,
-      projectId: args.projectId,
-      role: args.role,
-      content: args.content,
-      status: args.status,
+      projectId: project._id,
+      role: "user" as const,
+      content: args.message,
     });
-
-    // Update conversation's updatedAt
-    await ctx.db.patch(args.conversationId, {
-      updatedAt: Date.now(),
+    const assistantMessageId = await ctx.db.insert("messages", {
+      conversationId: args.conversationId,
+      projectId: project._id,
+      role: "assistant" as const,
+      content: "",
+      status: "processing" as const,
     });
+    await ctx.db.patch(args.conversationId, { updatedAt: Date.now() });
 
-    return messageId;
+    return {
+      ok: true as const,
+      assistantMessageId,
+      projectId: project._id,
+      supersededMessageIds: processing.map((m) => m._id),
+    };
   },
 });
 
@@ -70,10 +144,21 @@ export const updateMessageContent = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      return { applied: false as const, reason: "not_found" as const };
+    }
+    // Only a processing message may complete. A cancelled or already-completed
+    // message is never overwritten by a late-finishing / superseded run.
+    if (message.status !== "processing") {
+      return { applied: false as const, reason: "not_processing" as const };
+    }
+
     await ctx.db.patch(args.messageId, {
       content: args.content,
       status: "completed" as const,
     });
+    return { applied: true as const };
   },
 });
 
@@ -81,18 +166,22 @@ export const updateMessageStatus = mutation({
   args: {
     internalKey: v.string(),
     messageId: v.id("messages"),
-    status: v.union(
-      v.literal("processing"),
-      v.literal("completed"),
-      v.literal("cancelled"),
-    ),
+    status: v.union(v.literal("completed"), v.literal("cancelled")),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const message = await ctx.db.get(args.messageId);
+    // Terminal states are only reachable from "processing"; anything else is
+    // a no-op so late/duplicate transitions cannot flip a settled message.
+    if (!message || message.status !== "processing") {
+      return { applied: false as const };
+    }
+
     await ctx.db.patch(args.messageId, {
       status: args.status,
     });
+    return { applied: true as const };
   },
 });
 
@@ -123,16 +212,20 @@ export const getRecentMessages = query({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const limit = Math.min(args.limit ?? 10, 50);
+
+    // Read only the most recent `limit` rows via the index instead of
+    // collecting the entire conversation and slicing in JS.
     const messages = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId),
       )
-      .order("asc")
-      .collect();
+      .order("desc")
+      .take(limit);
 
-    const limit = args.limit ?? 10;
-    return messages.slice(-limit);
+    // Return chronological (ascending) to preserve the previous contract.
+    return messages.reverse();
   },
 });
 
@@ -207,7 +300,9 @@ export const updateFile = mutation({
   },
 });
 
-// Used for Agent "CreateFile" tool
+// Used for Agent "CreateFile" tool (agent path does not pass upsert, so its
+// "already exists" error behavior is unchanged). Import passes upsert:true so
+// a retry after a partial failure overwrites in place instead of throwing.
 export const createFile = mutation({
   args: {
     internalKey: v.string(),
@@ -215,6 +310,7 @@ export const createFile = mutation({
     name: v.string(),
     content: v.string(),
     parentId: v.optional(v.id("files")),
+    upsert: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
@@ -231,7 +327,18 @@ export const createFile = mutation({
     );
 
     if (existing) {
-      throw new Error("File already exists");
+      if (!args.upsert) {
+        throw new Error("File already exists");
+      }
+      if (existing.storageId) {
+        await ctx.storage.delete(existing.storageId);
+      }
+      await ctx.db.patch(existing._id, {
+        content: args.content,
+        storageId: undefined,
+        updatedAt: Date.now(),
+      });
+      return existing._id;
     }
 
     const fileId = await ctx.db.insert("files", {
@@ -302,13 +409,15 @@ export const createFiles = mutation({
   },
 });
 
-// Used for Agent "CreateFolder" tool
+// Used for Agent "CreateFolder" tool. Import passes upsert:true so a retry
+// re-resolves the existing folder id instead of throwing.
 export const createFolder = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
     name: v.string(),
     parentId: v.optional(v.id("files")),
+    upsert: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
@@ -325,7 +434,10 @@ export const createFolder = mutation({
     );
 
     if (existing) {
-      throw new Error("Folder already exists");
+      if (!args.upsert) {
+        throw new Error("Folder already exists");
+      }
+      return existing._id;
     }
 
     const fileId = await ctx.db.insert("files", {
@@ -434,18 +546,24 @@ export const deleteFile = mutation({
   },
 });
 
+// Paginated so a large project is cleaned across several bounded transactions
+// (a single all-rows delete can exceed Convex's per-transaction write limits).
+// The caller loops until hasMore is false.
 export const cleanup = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const limit = Math.min(args.limit ?? 200, 500);
+
     const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
+      .take(limit);
 
     for (const file of files) {
       // Delete storage file if it exists
@@ -456,7 +574,7 @@ export const cleanup = mutation({
       await ctx.db.delete(file._id);
     }
 
-    return { deleted: files.length };
+    return { deleted: files.length, hasMore: files.length === limit };
   },
 });
 
@@ -477,6 +595,7 @@ export const createBinaryFile = mutation({
     name: v.string(),
     storageId: v.id("_storage"),
     parentId: v.optional(v.id("files")),
+    upsert: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
@@ -493,7 +612,18 @@ export const createBinaryFile = mutation({
     );
 
     if (existing) {
-      throw new Error("File already exists");
+      if (!args.upsert) {
+        throw new Error("File already exists");
+      }
+      if (existing.storageId) {
+        await ctx.storage.delete(existing.storageId);
+      }
+      await ctx.db.patch(existing._id, {
+        storageId: args.storageId,
+        content: undefined,
+        updatedAt: Date.now(),
+      });
+      return existing._id;
     }
 
     const fileId = await ctx.db.insert("files", {
@@ -548,15 +678,41 @@ export const updateExportStatus = mutation({
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const project = await ctx.db.get(args.projectId);
+    if (!project) {
+      return { applied: false as const };
+    }
+
+    const current = project.exportStatus;
+    const terminal = ["completed", "failed", "cancelled"] as const;
+
+    // A terminal state (and clearing to undefined) is only reachable from an
+    // in-flight "exporting" run. This stops a late cancel from flipping a
+    // finished export, and stops cancel/reset from stamping a status onto a
+    // project that isn't exporting.
+    if (
+      args.status &&
+      terminal.includes(args.status as (typeof terminal)[number]) &&
+      current !== "exporting"
+    ) {
+      return { applied: false as const };
+    }
+    if (args.status === undefined && current === "exporting") {
+      return { applied: false as const };
+    }
+
     await ctx.db.patch("projects", args.projectId, {
       exportStatus: args.status,
       exportRepoUrl: args.repoUrl,
       updatedAt: Date.now(),
     });
+    return { applied: true as const };
   },
 });
 
-export const getProjectFilesWithUrls = query({
+// Lightweight file metadata for the whole project (no content). Used by export
+// to build paths without pulling every file body into one step output.
+export const getProjectFileManifest = query({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
@@ -569,15 +725,41 @@ export const getProjectFilesWithUrls = query({
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
 
-    return await Promise.all(
-      files.map(async (file) => {
-        if (file.storageId) {
-          const url = await ctx.storage.getUrl(file.storageId);
-          return { ...file, storageUrl: url };
-        }
-        return { ...file, storageUrl: null };
-      }),
-    );
+    return files.map((f) => ({
+      _id: f._id,
+      name: f.name,
+      type: f.type,
+      parentId: f.parentId,
+    }));
+  },
+});
+
+// Single file with its content and (for binary files) a resolved storage URL.
+// Fetched per-file inside batched export steps.
+export const getFileWithUrl = query({
+  args: {
+    internalKey: v.string(),
+    fileId: v.id("files"),
+  },
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+
+    const file = await ctx.db.get(args.fileId);
+    if (!file) {
+      return null;
+    }
+
+    const storageUrl = file.storageId
+      ? await ctx.storage.getUrl(file.storageId)
+      : null;
+
+    return {
+      _id: file._id,
+      name: file.name,
+      type: file.type,
+      content: file.content ?? null,
+      storageUrl,
+    };
   },
 });
 

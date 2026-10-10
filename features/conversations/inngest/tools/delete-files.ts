@@ -36,38 +36,39 @@ export const createDeleteFilesTool = ({
 
       const { fileIds } = parsed.data;
 
-      // Validate all files exist before running the step
-      const filesToDelete: {
-        id: string;
-        name: string;
-        type: string;
-      }[] = [];
-
-      for (const fileId of fileIds) {
-        const file = await convex.query(api.system.getFileById, {
-          internalKey,
-          fileId: fileId as Id<"files">,
-        });
-
-        if (!file) {
-          return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
-        }
-
-        filesToDelete.push({
-          id: file._id,
-          name: file.name,
-          type: file.type,
-        });
-      }
-
       try {
         return await toolStep?.run("delete-files", async () => {
+          // Validate all files inside the step so validation is memoized and
+          // not re-run on every Inngest replay.
+          const filesToDelete: {
+            id: Id<"files">;
+            name: string;
+            type: string;
+          }[] = [];
+
+          for (const fileId of fileIds) {
+            const file = await convex.query(api.system.getFileById, {
+              internalKey,
+              fileId: fileId as Id<"files">,
+            });
+
+            if (!file) {
+              return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
+            }
+
+            filesToDelete.push({
+              id: file._id,
+              name: file.name,
+              type: file.type,
+            });
+          }
+
           const results: string[] = [];
 
           for (const file of filesToDelete) {
             await convex.mutation(api.system.deleteFile, {
               internalKey,
-              fileId: file.id as Id<"files">,
+              fileId: file.id,
             });
 
             results.push(`Deleted ${file.type} "${file.name}" successfully`);

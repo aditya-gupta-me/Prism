@@ -33,18 +33,19 @@ export const createRenameFileTool = ({
 
       const { fileId, newName } = parsed.data;
 
-      // Validate file exists before running the step
-      const file = await convex.query(api.system.getFileById, {
-        internalKey,
-        fileId: fileId as Id<"files">,
-      });
-
-      if (!file) {
-        return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
-      }
-
       try {
         return await toolStep?.run("rename-file", async () => {
+          // Validate inside the step so it is memoized and not re-run on every
+          // Inngest replay (also shrinks the TOCTOU window to one step).
+          const file = await convex.query(api.system.getFileById, {
+            internalKey,
+            fileId: fileId as Id<"files">,
+          });
+
+          if (!file) {
+            return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
+          }
+
           await convex.mutation(api.system.renameFile, {
             internalKey,
             fileId: fileId as Id<"files">,

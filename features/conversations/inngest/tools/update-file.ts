@@ -33,22 +33,23 @@ export const createUpdateFileTool = ({
 
       const { fileId, content } = parsed.data;
 
-      // Validate file exists before running the step
-      const file = await convex.query(api.system.getFileById, {
-        internalKey,
-        fileId: fileId as Id<"files">,
-      });
-
-      if (!file) {
-        return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
-      }
-
-      if (file.type === "folder") {
-        return `Error: "${fileId}" is a folder, not a file. You can only update file contents.`;
-      }
-
       try {
         return await toolStep?.run("update-file", async () => {
+          // Validate inside the step so it is memoized and not re-run on every
+          // Inngest replay (also shrinks the TOCTOU window to one step).
+          const file = await convex.query(api.system.getFileById, {
+            internalKey,
+            fileId: fileId as Id<"files">,
+          });
+
+          if (!file) {
+            return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
+          }
+
+          if (file.type === "folder") {
+            return `Error: "${fileId}" is a folder, not a file. You can only update file contents.`;
+          }
+
           await convex.mutation(api.system.updateFile, {
             internalKey,
             fileId: fileId as Id<"files">,
@@ -58,7 +59,7 @@ export const createUpdateFileTool = ({
           return `File "${file.name}" updated successfully`;
         });
       } catch (error) {
-        return `Error update file: ${error instanceof Error ? error.message : "Unknown error"}`;
+        return `Error updating file: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },
   });

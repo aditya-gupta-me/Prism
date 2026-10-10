@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { createAgent, gemini, createNetwork } from "@inngest/agent-kit";
 
 import { inngest } from "@/inngest/client";
@@ -23,12 +24,28 @@ interface MessageEvent {
   messageId: Id<"messages">;
   conversationId: Id<"conversations">;
   projectId: Id<"projects">;
+  ownerId: string;
   message: string;
 }
+
+// Runtime validation of the event payload. zod guarantees the shape; the
+// `as MessageEvent` cast below re-applies the branded Id types for TypeScript.
+const messageEventSchema = z.object({
+  messageId: z.string().min(1),
+  conversationId: z.string().min(1),
+  projectId: z.string().min(1),
+  ownerId: z.string().min(1),
+  message: z.string(),
+});
 
 export const processMessage = inngest.createFunction(
   {
     id: "process-message",
+    retries: 3,
+    // Hard single-flight guarantee per project: even if two events slip past
+    // the route's atomic claim, runs execute serially so two agents can never
+    // mutate the same file tree concurrently.
+    concurrency: [{ key: "event.data.projectId", limit: 1 }],
     cancelOn: [
       {
         event: "message/cancel",
@@ -56,7 +73,13 @@ export const processMessage = inngest.createFunction(
     event: "message/sent",
   },
   async ({ event, step }) => {
-    const { messageId, conversationId, projectId, message } =
+    const validation = messageEventSchema.safeParse(event.data);
+    if (!validation.success) {
+      throw new NonRetriableError(
+        `Invalid message/sent payload: ${validation.error.message}`,
+      );
+    }
+    const { messageId, conversationId, projectId, ownerId, message } =
       event.data as MessageEvent;
 
     const internalKey = process.env.PRISM_CONVEX_INTERNAL_KEY;
@@ -67,14 +90,13 @@ export const processMessage = inngest.createFunction(
       );
     }
 
-    // TODO: Check if this is needed
-    await step.sleep("wait-for-db-sync", "1s");
-
-    // Get conversation for title generation check
+    // Get conversation for title generation check. Re-verify ownership at
+    // execution time (defense in depth against replayed/tampered events).
     const conversation = await step.run("get-conversation", async () => {
-      return await convex.query(api.system.getConversationById, {
+      return await convex.query(api.system.getOwnedConversation, {
         internalKey,
         conversationId,
+        ownerId,
       });
     });
 
@@ -163,7 +185,9 @@ export const processMessage = inngest.createFunction(
         defaultParameters: {
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 1000,
+            // Generous ceiling so non-trivial file contents aren't silently
+            // truncated mid-output.
+            maxOutputTokens: 8192,
           },
         },
       }),
@@ -231,5 +255,35 @@ export const processMessage = inngest.createFunction(
     });
 
     return { success: true, messageId, conversationId };
+  },
+);
+
+// Inngest's onFailure does NOT fire when a run is cancelled (via cancelOn or the
+// dashboard), which would otherwise leave the assistant placeholder stuck in
+// "processing" forever. This handler listens for the system cancellation event
+// and flips the message to "cancelled" (guarded, so it no-ops if the route
+// already settled it).
+export const processMessageCancelled = inngest.createFunction(
+  { id: "process-message-cancelled" },
+  {
+    event: "inngest/function.cancelled",
+    if: 'event.data.function_id == "prism-process-message"',
+  },
+  async ({ event, step }) => {
+    const internalKey = process.env.PRISM_CONVEX_INTERNAL_KEY;
+    if (!internalKey) return;
+
+    const original = event.data?.event?.data as
+      | Partial<MessageEvent>
+      | undefined;
+    if (!original?.messageId) return;
+
+    await step.run("mark-message-cancelled", async () => {
+      await convex.mutation(api.system.updateMessageStatus, {
+        internalKey,
+        messageId: original.messageId as Id<"messages">,
+        status: "cancelled",
+      });
+    });
   },
 );
